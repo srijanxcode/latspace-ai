@@ -1,7 +1,7 @@
 # 🚀 LatSpace AI
 
-> AI-powered Excel Parsing + Parameter Onboarding Platform  
-> Built with FastAPI, Streamlit, Gemini 1.5 Flash  
+> AI-Powered Excel Parsing + Parameter Onboarding Platform  
+> Built with FastAPI • Streamlit • Gemini 1.5 Flash  
 > Fully containerized & deployed on Railway
 
 ---
@@ -11,60 +11,65 @@
 | Service | Link |
 |----------|------|
 | 📘 Backend API Docs | https://latspace-ai-production.up.railway.app/docs |
-| 📊 Track A — Excel Parser | https://your-track-a-domain.up.railway.app |
-| 🧭 Track B — Onboarding Wizard | https://your-track-b-domain.up.railway.app |
-
-> Replace frontend links above with your actual Railway frontend domains.
+| 📊 Track A — Excel Parser | https://amused-happiness-production.up.railway.app |
+| 🧭 Track B — Onboarding Wizard | https://diligent-luck-production.up.railway.app |
 
 ---
 
 # 🧠 Project Overview
 
-LatSpace AI is a hybrid AI + deterministic system designed to:
+LatSpace AI is a hybrid AI + deterministic system designed to intelligently onboard structured data from messy sources.
 
-- Parse messy Excel datasets intelligently
-- Map fuzzy headers to canonical parameters
-- Validate formulas and structured onboarding inputs
-- Provide context-aware AI suggestions
-- Ensure strict schema validation via Pydantic
+It demonstrates how to use LLMs responsibly in production systems by:
 
-This project demonstrates **LLM integration done responsibly** — using AI only where semantic reasoning is required.
+- Using AI only where semantic reasoning is required
+- Keeping value parsing deterministic
+- Strictly validating all outputs
+- Minimizing LLM cost with optimized call design
+
+This is not just an LLM demo — it’s a system-level engineering solution.
 
 ---
 
 # 🎯 Track A — Excel Parser
 
 ### 🔍 What It Does
+
 - Upload messy multi-sheet Excel files
-- Uses Gemini to map headers → canonical parameters
-- Deterministic Python parsing for values
-- Schema validation via Pydantic
-- Duplicate detection across sheets
-- Structured JSON output
+- Uses Gemini to map fuzzy headers → canonical parameter names
+- Parses values deterministically in Python
+- Validates structure using Pydantic
+- Detects duplicates across sheets
+- Returns structured JSON output
 
 ### 🏗 Design Principles
-- ✅ One LLM call per sheet (NOT per column or cell)
+
+- ✅ **One LLM call per sheet** (NOT per column or per cell)
 - ✅ LLM only for semantic header mapping
-- ✅ Deterministic value parsing (cost-efficient)
+- ✅ Deterministic parsing for all values
 - ✅ Strict schema validation
 - ✅ Multi-sheet support
+
+This keeps cost low while maintaining intelligent mapping capability.
 
 ---
 
 # 🧭 Track B — Onboarding Wizard
 
 ### 🔍 What It Does
+
 - Guided multi-step onboarding flow
 - Parameter registry selection
 - Formula validation
-- Context-aware Gemini suggestions
+- Context-aware AI suggestions via Gemini
 - Structured submission payload
 
 ### ⚙️ Technical Highlights
+
 - FastAPI validation layer
-- Typed Pydantic request/response models
+- Strongly typed Pydantic request/response models
 - Controlled temperature strategy
-- Deterministic + creative hybrid architecture
+- Hybrid deterministic + AI-driven logic
 
 ---
 
@@ -73,14 +78,16 @@ This project demonstrates **LLM integration done responsibly** — using AI only
 **Model:** Google Gemini 1.5 Flash  
 
 Why this model?
+
 - Fast
 - Free-tier friendly
 - Strong JSON instruction following
-- Cost efficient
+- Reliable structured outputs
 
 ### 🎛 Temperature Strategy
-- `0.1` → Deterministic mapping (Track A)
-- `0.3` → Creative suggestions (Track B)
+
+- `0.1` → Deterministic header mapping (Track A)
+- `0.3` → Suggestion generation (Track B)
 
 ---
 
@@ -120,7 +127,7 @@ Backend listens on dynamic `$PORT` for Railway compatibility.
 # 🧪 Local Development (Docker)
 
 ```bash
-# Clone repo
+# Clone repository
 git clone https://github.com/srijanxcode/latspace-ai.git
 cd latspace-ai
 
@@ -151,20 +158,21 @@ make create-test-data
 # 💡 Key Engineering Decisions
 
 - Hybrid AI + deterministic design
-- No LLM per-cell calls (cost control)
-- Pydantic everywhere for strict validation
+- No per-cell LLM calls (cost control)
+- Pydantic validation everywhere
 - Clean separation of concerns
-- Containerized for portability
+- Containerized architecture
 - Railway-ready deployment configuration
 
 ---
 
 # 🚀 Production Deployment
 
-- Backend deployed on Railway
-- Frontends deployed as separate Railway services
-- Uses dynamic PORT binding
-- Environment variables managed securely
+- Backend deployed as Railway service
+- Track A and Track B deployed as separate Railway services
+- Dynamic port binding
+- Secure environment variable handling
+- Independent scaling per service
 
 ---
 
@@ -175,7 +183,7 @@ make create-test-data
 - Unit tests for parser & validator
 - Caching header mappings
 - CI/CD integration
-- Usage analytics
+- Usage analytics & monitoring
 
 ---
 
@@ -183,10 +191,10 @@ make create-test-data
 
 LatSpace AI demonstrates:
 
-- Thoughtful LLM usage
-- Strong backend architecture
-- Full-stack integration
-- Cost-efficient AI design
+- Practical LLM integration
+- Clean backend architecture
+- Full-stack system design
+- Cost-efficient AI usage
 - Production-ready deployment
 
-This is not just an LLM demo — it’s a system-level engineering solution.
+This project showcases thoughtful engineering — not just API calls.
