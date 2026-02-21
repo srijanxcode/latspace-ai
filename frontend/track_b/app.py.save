@@ -1,0 +1,462 @@
+"""
+Track B Frontend — Parameter Onboarding Wizard
+Multi-step Streamlit wizard for onboarding a new plant.
+"""
+import json
+import os
+import re
+import time
+
+import httpx
+import streamlit as st
+
+API_BASE = os.getenv("API_BASE", "http://localhost:8000")
+
+st.set_page_config(
+    page_title="LatSpace — Onboarding Wizard",
+    page_icon="🏭",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ── Session State Initialisation ───────────────────────────────────────────
+def init_state():
+    defaults = {
+        "step": 1,
+        "plant": {},
+        "assets": [],
+        "selected_params": [],
+        "param_overrides": {},
+        "formulas": {},
+        "submitted": False,
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+init_state()
+
+STEPS = ["Plant Info", "Assets", "Parameters", "Formulas", "Review & Submit"]
+ASSET_TYPES = ["boiler", "turbine", "product", "kiln", "other"]
+
+# ── Sidebar ────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.image("https://img.icons8.com/fluency/96/factory.png", width=64)
+    st.title("LatSpace AI")
+    st.caption("Industrial ESG Platform")
+    st.divider()
+    st.markdown("### Track B")
+    st.markdown("**Onboarding Wizard**")
+    st.divider()
+    st.markdown("**Progress**")
+    for i, step_name in enumerate(STEPS, 1):
+        icon = "✅" if i < st.session_state.step else ("▶️" if i == st.session_state.step else "⬜")
+        st.markdown(f"{icon} Step {i}: {step_name}")
+    st.divider()
+
+    # Jump to step
+    if st.session_state.step > 1:
+        st.markdown("**Jump to step:**")
+        for i in range(1, st.session_state.step):
+            if st.button(f"Edit Step {i}: {STEPS[i-1]}", key=f"jump_{i}", use_container_width=True):
+                st.session_state.step = i
+                st.rerun()
+
+# ── Header ─────────────────────────────────────────────────────────────────
+st.title("🏭 Plant Onboarding Wizard")
+step = st.session_state.step
+st.progress(step / len(STEPS), text=f"Step {step} of {len(STEPS)}: {STEPS[step-1]}")
+st.divider()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# STEP 1 — Plant Info
+# ══════════════════════════════════════════════════════════════════════════
+if step == 1:
+    st.markdown("## 🏗️ Step 1: Plant Information")
+    st.markdown("Tell us about the factory you're onboarding.")
+
+    with st.form("plant_form"):
+        col1, col2 = st.columns(2)
+        with col1:
+            name = st.text_input("Plant Name *", value=st.session_state.plant.get("name", ""),
+                                  placeholder="e.g. Harihar Pulp Unit")
+            address = st.text_input("Address *", value=st.session_state.plant.get("address", ""),
+                                     placeholder="e.g. Harihar, Karnataka, India")
+        with col2:
+            manager_email = st.text_input("Manager Email *",
+                                           value=st.session_state.plant.get("manager_email", ""),
+                                           placeholder="manager@company.com")
+            description = st.text_area("Description (optional)",
+                                        value=st.session_state.plant.get("description", ""),
+                                        placeholder="Brief description of the plant and its primary operations...")
+
+        submitted = st.form_submit_button("Next: Configure Assets →", type="primary", use_container_width=True)
+
+        if submitted:
+            errors = []
+            if not name.strip():
+                errors.append("Plant name is required.")
+            if not address.strip():
+                errors.append("Address is required.")
+            if not manager_email.strip():
+                errors.append("Manager email is required.")
+            elif not re.match(r"^[\w\.-]+@[\w\.-]+\.\w+$", manager_email.strip()):
+                errors.append("Invalid email format.")
+
+            if errors:
+                for e in errors:
+                    st.error(e)
+            else:
+                st.session_state.plant = {
+                    "name": name.strip(),
+                    "description": description.strip(),
+                    "address": address.strip(),
+                    "manager_email": manager_email.strip(),
+                }
+                st.session_state.step = 2
+                st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# STEP 2 — Assets
+# ══════════════════════════════════════════════════════════════════════════
+elif step == 2:
+    st.markdown("## ⚙️ Step 2: Assets")
+    st.markdown("Add the equipment/assets present at this plant. At least one asset is required.")
+
+    # Existing assets table
+    if st.session_state.assets:
+        st.markdown("### Current Assets")
+        for i, asset in enumerate(st.session_state.assets):
+            col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+            col1.code(asset["name"])
+            col2.text(asset["display_name"])
+            col3.text(asset["type"])
+            if col4.button("🗑️", key=f"del_asset_{i}", help="Remove"):
+                st.session_state.assets.pop(i)
+                st.rerun()
+        st.divider()
+
+    # Add new asset form
+    st.markdown("### Add New Asset")
+    with st.form("add_asset_form", clear_on_submit=True):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            a_name = st.text_input("Asset Name *", placeholder="e.g. AFBC-1")
+        with col2:
+            a_display = st.text_input("Display Name *", placeholder="e.g. AFBC Boiler 1")
+        with col3:
+            a_type = st.selectbox("Asset Type *", ASSET_TYPES)
+        add_btn = st.form_submit_button("➕ Add Asset", use_container_width=True)
+
+        if add_btn:
+            errors = []
+            if not a_name.strip():
+                errors.append("Asset name is required.")
+            elif any(a["name"].upper() == a_name.strip().upper() for a in st.session_state.assets):
+                errors.append(f"Asset name '{a_name}' already exists.")
+            if not a_display.strip():
+                errors.append("Display name is required.")
+            if errors:
+                for e in errors:
+                    st.error(e)
+            else:
+                st.session_state.assets.append({
+                    "name": a_name.strip(),
+                    "display_name": a_display.strip(),
+                    "type": a_type,
+                })
+                st.success(f"✅ Added asset: {a_name.strip()}")
+                st.rerun()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back", use_container_width=True):
+            st.session_state.step = 1
+            st.rerun()
+    with col2:
+        if st.button("Next: Configure Parameters →", type="primary", use_container_width=True):
+            if not st.session_state.assets:
+                st.error("Please add at least one asset before proceeding.")
+            else:
+                st.session_state.step = 3
+                st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# STEP 3 — Parameters
+# ══════════════════════════════════════════════════════════════════════════
+elif step == 3:
+    st.markdown("## 📋 Step 3: Parameters")
+    st.markdown("Select which parameters to track. Parameters are filtered by your asset types.")
+
+    asset_types = list({a["type"] for a in st.session_state.assets})
+
+    try:
+        resp = httpx.get(
+            f"{API_BASE}/api/track-b/parameters",
+            params={"asset_types": ",".join(asset_types)},
+            timeout=10.0,
+        )
+        params = resp.json()
+    except Exception:
+        st.error("Could not fetch parameters from backend. Is it running?")
+        st.stop()
+
+    # AI Suggestion
+    plant_desc = st.session_state.plant.get("description", "")
+    if plant_desc and st.button("🤖 Get AI Parameter Suggestions", use_container_width=True):
+        with st.spinner("Asking Gemini for recommendations..."):
+            try:
+                sugg_resp = httpx.post(
+                    f"{API_BASE}/api/track-b/suggest-parameters",
+                    json={"plant_description": plant_desc, "asset_types": asset_types},
+                    timeout=30.0,
+                )
+                sugg = sugg_resp.json()
+                st.session_state.selected_params = list(set(
+                    st.session_state.selected_params + sugg["suggested_parameter_names"]
+                ))
+                st.info(f"💡 AI reasoning: {sugg['reasoning']}")
+                st.rerun()
+            except Exception as e:
+                st.error(f"AI suggestion failed: {e}")
+
+    # Group by section
+    sections: dict[str, list] = {}
+    for p in params:
+        sections.setdefault(p["section"], []).append(p)
+
+    st.markdown("### Select Parameters by Section")
+    st.caption("Toggle sections to expand. Check parameters to enable them.")
+
+    for section, sparams in sections.items():
+        with st.expander(f"📂 {section} ({len(sparams)} parameters)", expanded=True):
+            for p in sparams:
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    checked = st.checkbox(
+                        p["display_name"],
+                        value=p["name"] in st.session_state.selected_params,
+                        key=f"param_{p['name']}",
+                    )
+                    if checked and p["name"] not in st.session_state.selected_params:
+                        st.session_state.selected_params.append(p["name"])
+                    elif not checked and p["name"] in st.session_state.selected_params:
+                        st.session_state.selected_params.remove(p["name"])
+                with col2:
+                    st.caption(f"`{p['name']}` | {p['unit']} | {p['category']}")
+
+    st.divider()
+    st.info(f"**{len(st.session_state.selected_params)}** parameters selected")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back", use_container_width=True):
+            st.session_state.step = 2
+            st.rerun()
+    with col2:
+        if st.button("Next: Define Formulas →", type="primary", use_container_width=True):
+            if not st.session_state.selected_params:
+                st.error("Please select at least one parameter.")
+            else:
+                st.session_state.step = 4
+                st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# STEP 4 — Formulas
+# ══════════════════════════════════════════════════════════════════════════
+elif step == 4:
+    st.markdown("## 🔢 Step 4: Formulas")
+    st.markdown("Define calculation expressions for computed parameters. Reference other enabled parameters by name.")
+
+    try:
+        all_params = httpx.get(f"{API_BASE}/api/track-b/parameters", timeout=10.0).json()
+    except Exception:
+        all_params = []
+
+    calculated_params = [
+        p for p in all_params
+        if p["name"] in st.session_state.selected_params and p["category"] == "calculated"
+    ]
+
+    if not calculated_params:
+        st.info("No calculated parameters are enabled. You can skip this step.")
+    else:
+        st.markdown(f"You have **{len(calculated_params)}** calculated parameters to configure:")
+        st.caption(f"Enabled parameters you can reference: `{'`, `'.join(st.session_state.selected_params)}`")
+        st.divider()
+
+        for p in calculated_params:
+            st.markdown(f"#### {p['display_name']} (`{p['name']}`)")
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                formula = st.text_input(
+                    f"Formula for {p['name']}",
+                    value=st.session_state.formulas.get(p["name"], ""),
+                    placeholder="e.g. steam_generation / coal_consumption * 100",
+                    key=f"formula_{p['name']}",
+                    label_visibility="collapsed",
+                )
+            with col2:
+                validate_btn = st.button("✔️ Validate", key=f"val_{p['name']}")
+
+            if validate_btn and formula:
+                with st.spinner("Validating..."):
+                    try:
+                        vresp = httpx.post(
+                            f"{API_BASE}/api/track-b/validate-formula",
+                            json={"expression": formula, "enabled_parameters": st.session_state.selected_params},
+                            timeout=10.0,
+                        )
+                        vresult = vresp.json()
+                        if vresult["valid"]:
+                            st.success(f"✅ Valid! References: `{'`, `'.join(vresult['depends_on'])}`")
+                        else:
+                            st.error(f"❌ {vresult['error']}")
+                    except Exception as e:
+                        st.error(f"Validation error: {e}")
+
+            if formula:
+                st.session_state.formulas[p["name"]] = formula
+            st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back", use_container_width=True):
+            st.session_state.step = 3
+            st.rerun()
+    with col2:
+        if st.button("Next: Review & Submit →", type="primary", use_container_width=True):
+            st.session_state.step = 5
+            st.rerun()
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# STEP 5 — Review & Submit
+# ══════════════════════════════════════════════════════════════════════════
+elif step == 5:
+    st.markdown("## ✅ Step 5: Review & Submit")
+    st.markdown("Review your complete plant configuration before submitting.")
+
+    try:
+        all_params_resp = httpx.get(f"{API_BASE}/api/track-b/parameters", timeout=10.0).json()
+        param_lookup = {p["name"]: p for p in all_params_resp}
+    except Exception:
+        param_lookup = {}
+
+    # Build config
+    selected_param_objects = [
+        param_lookup[name] for name in st.session_state.selected_params if name in param_lookup
+    ]
+    formula_objects = []
+    for pname, expr in st.session_state.formulas.items():
+        if expr.strip():
+            param_names_in_expr = re.findall(r"[a-z][a-z0-9_]*", expr)
+            depends = [t for t in param_names_in_expr if t in st.session_state.selected_params]
+            formula_objects.append({"parameter": pname, "expression": expr, "depends_on": depends})
+
+    config = {
+        "plant": st.session_state.plant,
+        "assets": st.session_state.assets,
+        "parameters": selected_param_objects,
+        "formulas": formula_objects,
+    }
+
+    # Summary display
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🏭 Plant")
+        st.markdown(f"**Name:** {config['plant'].get('name', '')}")
+        st.markdown(f"**Address:** {config['plant'].get('address', '')}")
+        st.markdown(f"**Manager:** {config['plant'].get('manager_email', '')}")
+        if config['plant'].get('description'):
+            st.markdown(f"**Description:** {config['plant']['description']}")
+
+    with col2:
+        st.markdown("### ⚙️ Assets")
+        for a in config["assets"]:
+            st.markdown(f"- **{a['name']}** — {a['display_name']} ({a['type']})")
+
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"### 📋 Parameters ({len(config['parameters'])})")
+        by_section: dict = {}
+        for p in config["parameters"]:
+            by_section.setdefault(p["section"], []).append(p)
+        for sec, sparams in by_section.items():
+            st.markdown(f"**{sec}**")
+            for p in sparams:
+                st.caption(f"  • {p['display_name']} ({p['unit']}) — {p['category']}")
+
+    with col2:
+        if config["formulas"]:
+            st.markdown(f"### 🔢 Formulas ({len(config['formulas'])})")
+            for f in config["formulas"]:
+                st.code(f"{f['parameter']} = {f['expression']}")
+        else:
+            st.markdown("### 🔢 Formulas")
+            st.caption("No formulas configured.")
+
+    st.divider()
+
+    # JSON Preview
+    with st.expander("👁️ Preview JSON Config"):
+        st.json(config)
+
+    # Download
+    st.download_button(
+        label="⬇️ Download JSON Config",
+        data=json.dumps(config, indent=2),
+        file_name=f"{config['plant'].get('name', 'plant').replace(' ', '_')}_config.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+
+    st.divider()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("← Back to Formulas", use_container_width=True):
+            st.session_state.step = 4
+            st.rerun()
+    with col2:
+        if st.button("🚀 Submit Configuration", type="primary", use_container_width=True):
+            with st.spinner("Submitting..."):
+                try:
+                    resp = httpx.post(
+                        f"{API_BASE}/api/track-b/onboarding",
+                        json=config,
+                        timeout=15.0,
+                    )
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        st.balloons()
+                        st.success(f"🎉 {result['message']}")
+                        st.session_state.submitted = True
+                    else:
+                        st.error(f"Submission failed: {resp.text}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    if st.session_state.submitted:
+        st.divider()
+        if st.button("🔄 Start New Onboarding", use_container_width=True):
+            for key in ["step", "plant", "assets", "selected_params", "param_overrides", "formulas", "submitted"]:
+                del st.session_state[key]
+            init_state()
+            st.rerun()
+```
+
+---
+
+### FILE 16: `frontend/requirements.txt`
+```
+streamlit==1.38.0
+httpx==0.27.2
+pandas==2.2.3
+python-dotenv==1.0.1
